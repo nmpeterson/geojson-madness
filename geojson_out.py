@@ -1,7 +1,11 @@
 # coding: utf-8
 import json
 import os
-import urllib2
+import sys
+if ((3, 0) <= sys.version_info <= (3, 9)):
+    from urllib.request import urlopen, Request
+elif ((2, 0) <= sys.version_info <= (2, 9)):
+    from urllib2 import urlopen, Request
 
 import arcpy
 
@@ -15,7 +19,7 @@ def part_split_at_nones(part_items):
                 yield current_part
             current_part = []
         else:
-            current_part.append((item.X, item.Y))
+            current_part.append((round(item.X, 6), round(item.Y, 6)))
     if current_part:
         yield current_part
 
@@ -26,11 +30,11 @@ def geometry_to_struct(in_geometry):
         pt = in_geometry.getPart(0)
         return {
                     'type': "Point",
-                    'coordinates': (pt.X, pt.Y)
+                    'coordinates': (round(pt.X, 6), round(pt.Y, 6))
                }
     elif isinstance(in_geometry, arcpy.Polyline):
-        parts = [[(point.X, point.Y) for point in in_geometry.getPart(part)]
-                 for part in xrange(in_geometry.partCount)]
+        parts = [[(round(point.X, 6), round(point.Y, 6)) for point in in_geometry.getPart(part)]
+                 for part in range(in_geometry.partCount)]
         if len(parts) == 1:
             return {
                         'type': "LineString",
@@ -43,7 +47,7 @@ def geometry_to_struct(in_geometry):
                    }
     elif isinstance(in_geometry, arcpy.Polygon):
         parts = [list(part_split_at_nones(in_geometry.getPart(part)))
-                 for part in xrange(in_geometry.partCount)]
+                 for part in range(in_geometry.partCount)]
         if len(parts) == 1:
             return {
                         'type': "Polygon",
@@ -90,7 +94,7 @@ def geojson_lines_for_feature_class(in_feature_class):
 
     with arcpy.da.SearchCursor(in_feature_class, ['SHAPE@', '*'],
                                spatial_reference=spatial_reference) as in_cur:
-        col_names = [aliased_fields.get(f, f) for f in in_cur.fields[1:]]
+        col_names = [aliased_fields.get(f, f) for f in in_cur.fields[1:] if f not in ['Shape_Area', 'Shape_Length']]
         yield '{'
         yield '  "type": "FeatureCollection",'
         yield '  "features": ['
@@ -133,10 +137,10 @@ def post_gist(in_feature_class, feature_geojson):
                             filename: { "content": feature_geojson }
                         }
                    }
-    req = urllib2.Request("https://api.github.com/gists",
-                          json.dumps(gist_payload),
-                          headers = {'Content-Type': 'application/json'})
-    reponse = urllib2.urlopen(req)
+    req = Request("https://api.github.com/gists",
+                  json.dumps(gist_payload),
+                  headers = {'Content-Type': 'application/json'})
+    reponse = urlopen(req)
     return json.loads(reponse.read())["url"]
 
 def write_geojson_gist(in_feature_class):
@@ -146,4 +150,3 @@ def write_geojson_gist(in_feature_class):
     gist_url = post_gist(in_feature_class, geojson)
     arcpy.AddMessage("Posted Gist to {}".format(gist_url))
     return gist_url
-

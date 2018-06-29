@@ -1,6 +1,9 @@
 import imp
 import os
-import urlparse
+if ((3, 0) <= sys.version_info <= (3, 9)):
+    from urllib.parse import urlparse
+elif ((2, 0) <= sys.version_info <= (2, 9)):
+    from urlparse import urlparse
 
 import arcpy
 
@@ -47,7 +50,7 @@ class ImportGeoJSON(object):
         json_in = imp.load_module('geojson_in', *found_in)
 
         args = [parameters[idx].valueAsText
-                for idx in xrange(len(parameters))]
+                for idx in range(len(parameters))]
 
         json_in.geojson_to_feature(*args)
 
@@ -138,7 +141,7 @@ class ExportGeoJSON(object):
         json_out = imp.load_module('geojson_out', *found_out)
 
         args = [parameters[idx].valueAsText
-                for idx in xrange(len(parameters))]
+                for idx in range(len(parameters))]
         write_gist = args[-1] == "true"
 
         if write_gist:

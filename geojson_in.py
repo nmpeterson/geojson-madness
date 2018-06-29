@@ -1,8 +1,12 @@
 # coding: utf-8
 import json
 import os
+import sys
 import re
-import urllib2
+if ((3, 0) <= sys.version_info <= (3, 9)):
+    from urllib.request import urlopen
+elif ((2, 0) <= sys.version_info <= (2, 9)):
+    from urllib2 import urlopen
 
 import arcpy
 
@@ -14,7 +18,7 @@ def load_geojson_struct(in_json_location):
     if os.path.isfile(in_json_location):
         in_handle = open(in_json_location, 'rb')
     else:
-        in_handle = urllib2.urlopen(in_json_location)
+        in_handle = urlopen(in_json_location)
     return json.load(in_handle)
 
 # "Enumeration" for field type guesser
@@ -75,10 +79,11 @@ def determine_schema(json_struct):
             raise TypeError("Inconsistent geometry types")
 
         # Set up fields
-        for field_name, field_value in item['properties'].iteritems():
-            guessed_type = guess_type(field_value)
-            if field_name not in fields or guessed_type > fields[field_name]:
-                fields[field_name] = guessed_type
+        if 'properties' in item:
+            for field_name, field_value in item['properties'].items():
+                guessed_type = guess_type(field_value)
+                if field_name not in fields or guessed_type > fields[field_name]:
+                    fields[field_name] = guessed_type
     arcpy.AddMessage("Geometry type: {}".format(geometry_type))
     used_field_names = set()
     field_names = {}
@@ -162,7 +167,7 @@ def write_features(out_feature_class, out_schema, json_struct):
     # Create a list of (sane_field_name, field_name) tuples
     reverse_field_name_mapping = list(sorted((v, k)
                                       for k, v
-                                      in out_schema['field_names'].iteritems()))
+                                      in out_schema['field_names'].items()))
     fields = ["SHAPE@WKT"] + [f[0] for f in reverse_field_name_mapping]
     record_count = len(json_struct['features'])
     arcpy.SetProgressor("step", "Writing rows", 0, record_count)
@@ -170,7 +175,7 @@ def write_features(out_feature_class, out_schema, json_struct):
         for row_index, row_struct in enumerate(json_struct['features']):
             if (row_index % 100 == 1):
                 arcpy.SetProgressorPosition(row_index)
-            row_data = row_struct['properties']
+            row_data = row_struct['properties'] if 'properties' in row_struct else {}
             row_list = [row_data.get(k[1], None)
                         for k in reverse_field_name_mapping]
             wkt = geojson_to_geometry(row_struct['geometry'])
@@ -181,4 +186,3 @@ def geojson_to_feature(in_geojson, out_feature_class):
     out_schema = determine_schema(json_struct)
     create_feature_class(out_feature_class, out_schema)
     write_features(out_feature_class, out_schema, json_struct)
-
