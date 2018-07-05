@@ -2,6 +2,7 @@
 import json
 import os
 import sys
+from collections import OrderedDict
 if ((3, 0) <= sys.version_info <= (3, 9)):
     from urllib.request import urlopen, Request
 elif ((2, 0) <= sys.version_info <= (2, 9)):
@@ -94,31 +95,30 @@ def geojson_lines_for_feature_class(in_feature_class):
 
     with arcpy.da.SearchCursor(in_feature_class, ['SHAPE@', '*'],
                                spatial_reference=spatial_reference) as in_cur:
+        counter = 0
         col_names = [aliased_fields.get(f, f) for f in in_cur.fields[1:] if f not in ['Shape_Area', 'Shape_Length']]
-        yield '{'
-        yield '  "type": "FeatureCollection",'
-        yield '  "features": ['
+        yield '{"type": "FeatureCollection", "features": ['
         for row_idx, row in enumerate(in_cur):
-            if row_idx:
-                yield "    ,"
+            counter += 1
             if (row_idx % 100 == 1):
                 arcpy.SetProgressorPosition(row_idx)
             geometry_dict = geometry_to_struct(row[0])
             property_dict = dict(zip(col_names, row[1:]))
             if shape_field in property_dict:
                 del property_dict[shape_field]
-            row_struct = {
-                            "type": "Feature",
-                            "geometry": geometry_dict,
-                            "properties": property_dict
-                         }
-            for line in json.dumps(row_struct, indent=2).split("\n"):
-                yield "    " + line
-        yield '  ]'
-        yield '}'
+            row_struct = OrderedDict([
+                            ("type", "Feature"),
+                            ("properties", property_dict),
+                            ("geometry", geometry_dict),
+                         ])
+            if counter < record_count:
+                yield '  ' + json.dumps(row_struct) + ','
+            else:
+                yield '  ' + json.dumps(row_struct)  # No comma after final feature
+        yield ']}'
 
 def get_geojson_string(in_feature_class):
-    return "\n".join(geojson_lines_for_feature_class(in_feature_class))
+    return ''.join(geojson_lines_for_feature_class(in_feature_class))
 
 def write_geojson_file(in_feature_class, out_json_file):
     arcpy.AddMessage("Writing features from {} to {}".format(in_feature_class,
