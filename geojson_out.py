@@ -96,16 +96,23 @@ def geojson_lines_for_feature_class(in_feature_class):
     with arcpy.da.SearchCursor(in_feature_class, ['SHAPE@', '*'],
                                spatial_reference=spatial_reference) as in_cur:
         counter = 0
-        col_names = [aliased_fields.get(f, f) for f in in_cur.fields[1:] if f not in ['Shape_Area', 'Shape_Length']]
+        col_names = [aliased_fields.get(f, f) for f in in_cur.fields[1:] if f.lower() not in ['shape_area', 'shape_length', 'geom_area', 'geom_length']]
         yield '{"type": "FeatureCollection", "features": ['
         for row_idx, row in enumerate(in_cur):
             counter += 1
             if (row_idx % 100 == 1):
                 arcpy.SetProgressorPosition(row_idx)
             geometry_dict = geometry_to_struct(row[0])
-            property_dict = dict(zip(col_names, row[1:]))
+            property_dict = OrderedDict(zip(col_names, row[1:]))
             if shape_field in property_dict:
                 del property_dict[shape_field]
+
+            # Add some default display properties
+            if geometry_dict['type'] in ['LineString', 'MultiLineString']:
+                property_dict.update(OrderedDict([('stroke', '#0000ff'), ('stroke-opacity', 0.8), ('stroke-width', 2)]))
+            elif geometry_dict['type'] in ['Polygon', 'MultiPolygon']:
+                property_dict.update(OrderedDict([('fill', '#0000ff'), ('fill-opacity', 0.3), ('stroke', '#0000ff'), ('stroke-opacity', 0.8),  ('stroke-width', 1)]))
+
             row_struct = OrderedDict([
                             ("type", "Feature"),
                             ("properties", property_dict),
